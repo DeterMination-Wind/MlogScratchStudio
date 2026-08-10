@@ -6,10 +6,39 @@ See https://docs.turbowarp.org/development/getting-started to setup the complete
 
 If you just want to play with the GUI then it's the same process as upstream scratch-gui.
 
-## MlogChecker bridge
+## Mlog 工作区
 
-The UI exposes `window.MlogScratchStudio.registerChecker(checker)` so a desktop preload or Node-side adapter can register the local `MlogChecker` kernel.
-For a CLI-based bridge, see `src/lib/mlog-checker-cli-bridge.js`.
+`src/components/mlog-workspace/mlog-workspace.jsx` 是一个面向 Mindustry 逻辑编程的 Scratch-like 工作区：在网格舞台上摆放 `stageBlockTypes` 积木（见 `src/lib/mindustry-assets.js`），支持编译、导出与后端检查（inspector 含 舞台/list/后端 三个标签页）。
+
+### 项目模型 (`src/lib/mlog-project.js`)
+
+定义了项目数据结构：`MLOG_STORAGE_KEY`（localStorage 持久化键）、`STAGE_GRID`（12x8 网格）、`paletteCategories`（程序/控制/运算等积木调色板）、`createDefaultProject`、`cloneProject`、节点/列表/脚本辅助函数。
+
+### 编译器 (`src/lib/mlog-compiler.js`)
+
+嵌入式编译内核：把项目快照编译为 Mindustry 逻辑代码。`compileProject(snapshot)` 返回 `{ok, code, processors, diagnostics}`；`serializeProject(snapshot)` 导出序列化载荷。
+
+### Backend 桥接 (`src/lib/mlog-backend.js`)
+
+统一入口：转发 `compileProject`/`serializeProject` 给内嵌编译器，并管理已注册的外部 checker。外部 checker 收到 `check(source, fileName, worldProcessor)` 调用并返回 `{exitCode, stdout, stderr}`，输出会解析为 diagnostics。
+
+### 自动引导与 bridge 文件
+
+- `src/lib/mlog-checker-bootstrap.js`：页面加载后自动调用 `bootstrapMlogChecker()`——先 `fetch('/api/mlog-check')` 探测本地 HTTP 端点，成功则创建 HTTP bridge 并注册为 `window.MlogScratchChecker`。
+- `src/lib/mlog-checker-http-bridge.js`：`createMlogCheckerHttpBridge`，通过 POST `/api/mlog-check` 调用 checker。
+- `src/lib/mlog-checker-cli-bridge.js`：`createMlogCheckerCliBridge`，spawn `java -jar <jarPath> check` 的 CLI 方案。
+
+### window.MlogScratchStudio API
+
+工作区挂载后暴露 5 个 API（卸载时移除）：
+
+- `compile()` — 编译当前项目并更新结果
+- `exportProject()` — 序列化并导出项目载荷
+- `getProjectSnapshot()` — 返回当前项目快照
+- `registerChecker(checker)` — 注册外部 MlogChecker（desktop preload / Node 适配器）
+- `resetProject()` — 清空并重置项目
+
+宿主页面（如桌面 preload 或 Node 适配器）可用 `registerChecker` 注册本地 `MlogChecker` 内核；HTTP 端点存在时由 bootstrap 自动引导，CLI 方案见 `mlog-checker-cli-bridge.js`。
 
 ## License
 
